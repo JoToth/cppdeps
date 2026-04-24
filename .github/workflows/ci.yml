@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DBUILD_TESTING=ON
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  msys2-ucrt64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: git cmake ninja
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DBUILD_TESTING=ON
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

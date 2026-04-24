@@ -1,0 +1,7 @@
+build/
+_build/
+_cppdeps/
+CMakeUserPresets.json
+*.user
+*.swp
+.DS_Store
