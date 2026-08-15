@@ -22,5 +22,11 @@ if(BUILD_TESTING)
   add_test(NAME cppdeps_path_normalization
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/path_normalization.cmake
   )
+  add_test(NAME cppdeps_remote_bootstrap
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/remote_bootstrap.cmake
+  )
+  add_test(NAME cppdeps_bootstrap_latest_tag
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/bootstrap_latest_tag.cmake
+  )
   set_tests_properties(cppdeps_conflict_fail PROPERTIES WILL_FAIL TRUE)
 endif()

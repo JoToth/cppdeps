@@ -6,7 +6,7 @@
 # See LICENSE file for full license text.
 
 cmake_minimum_required(VERSION 3.20)
-include("${CMAKE_CURRENT_LIST_DIR}/../cmake/CppDeps.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/CppDepsBootstrap.cmake")
 
 cppdeps_add(
   NAME demo

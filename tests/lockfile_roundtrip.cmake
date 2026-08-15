@@ -11,6 +11,11 @@ cppdeps_test_make_repo(repo v1 v2)
 set(lock "${CMAKE_CURRENT_BINARY_DIR}/tmp/roundtrip.lock.cmake")
 set(root "${CMAKE_CURRENT_BINARY_DIR}/tmp/roundtrip_cppdeps")
 
+# Start from a clean test state. On failure, artifacts are intentionally kept
+# for debugging; the next test run removes them here.
+file(REMOVE_RECURSE "${root}")
+file(REMOVE "${lock}")
+
 # First run: resolve branch head and write lock. The repo is already at v2.
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -DTEST_REPO=${repo} -DTEST_LOCK=${lock} -DTEST_ROOT=${root} -P "${CMAKE_CURRENT_LIST_DIR}/resolve_and_lock.cmake"
@@ -47,3 +52,8 @@ file(READ "${root}/src/testdep/value.txt" locked_value)
 if(NOT locked_value STREQUAL "v2\n")
   message(FATAL_ERROR "strict lock checkout drifted; expected v2, got '${locked_value}', v3 was ${v3}")
 endif()
+
+# Successful tests leave no checkout/lockfile footprint behind.
+file(REMOVE_RECURSE "${root}")
+file(REMOVE "${lock}")
+
