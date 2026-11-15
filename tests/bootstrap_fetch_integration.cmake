@@ -24,8 +24,12 @@ file(TO_CMAKE_PATH "${_root}/bootstrap/cppdeps-bootstrap.cmake" _bootstrap_path)
 file(WRITE "${_consumer}/CMakeLists.txt" "cmake_minimum_required(VERSION 3.20)\nproject(cppdeps_consumer LANGUAGES NONE)\ninclude(\"${_bootstrap_path}\")\nif(NOT COMMAND cppdeps_add)\n  message(FATAL_ERROR \"cppdeps_add not exported\")\nendif()\nif(NOT CPPDEPS_VERSION STREQUAL \"1.0.4\")\n  message(FATAL_ERROR \"CPPDEPS_VERSION not exported: '\${CPPDEPS_VERSION}'\")\nendif()\n")
 
 function(_configure)
+  set(_generator_args)
+  if(DEFINED CPPDEPS_TEST_GENERATOR AND NOT CPPDEPS_TEST_GENERATOR STREQUAL "")
+    list(APPEND _generator_args -G "${CPPDEPS_TEST_GENERATOR}")
+  endif()
   execute_process(
-    COMMAND "${CMAKE_COMMAND}" -S "${_consumer}" -B "${_build}"
+    COMMAND "${CMAKE_COMMAND}" ${_generator_args} -S "${_consumer}" -B "${_build}"
       "-DCPPDEPS_BOOTSTRAP_GIT_REPOSITORY:STRING=${_repo}" ${ARGN}
     RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err
   )

@@ -34,7 +34,9 @@ if(PROJECT_IS_TOP_LEVEL
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/bootstrap_latest_tag.cmake
   )
   add_test(NAME cppdeps_bootstrap_fetch_integration
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/bootstrap_fetch_integration.cmake
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/bootstrap_fetch_integration.cmake"
   )
   add_test(NAME cppdeps_local_override_offline
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/local_override_offline.cmake
