@@ -20,6 +20,8 @@
 #   CMAKE_ADD_SUBDIRECTORY (default)
 #   HEADER_ONLY
 #   NONE
+#   ISOLATED (standalone CMake configure/build/install)
+#   Custom CONFIGURE_COMMAND, BUILD_COMMAND or INSTALL_COMMAND implies ISOLATED
 
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -219,9 +221,9 @@ function(_cppdeps_git_try_in dir result_var output_var)
 endfunction()
 
 function(cppdeps_add)
-  set(options HIGHEST_TAG)
-  set(oneValueArgs NAME GIT_REPOSITORY TAG BRANCH COMMIT HEAD_OF_BRANCH TAG_REGEX SORT BUILD)
-  set(multiValueArgs PROVIDES CMAKE_OPTIONS)
+  set(options HIGHEST_TAG ISOLATED)
+  set(oneValueArgs NAME GIT_REPOSITORY TAG BRANCH COMMIT HEAD_OF_BRANCH TAG_REGEX SORT BUILD ARTIFACT)
+  set(multiValueArgs PROVIDES CMAKE_OPTIONS CONFIGURE_COMMAND BUILD_COMMAND INSTALL_COMMAND INCLUDE_DIRS)
   cmake_parse_arguments(DEP "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   if(NOT DEP_NAME)
@@ -230,8 +232,18 @@ function(cppdeps_add)
   if(NOT DEP_GIT_REPOSITORY)
     _cppdeps_fatal("cppdeps_add(${DEP_NAME}) requires GIT_REPOSITORY")
   endif()
-  if(NOT DEP_BUILD)
+  # An explicit isolated flag or any custom build-phase command selects the
+  # standalone build backend. Keep the existing in-tree default otherwise.
+  if(DEP_ISOLATED OR DEP_CONFIGURE_COMMAND OR DEP_BUILD_COMMAND OR DEP_INSTALL_COMMAND)
+    if(DEP_BUILD AND NOT DEP_BUILD STREQUAL "ISOLATED")
+      _cppdeps_fatal("${DEP_NAME}: isolated commands/ISOLATED conflict with BUILD '${DEP_BUILD}'")
+    endif()
+    set(DEP_BUILD "ISOLATED")
+  elseif(NOT DEP_BUILD)
     set(DEP_BUILD "CMAKE_ADD_SUBDIRECTORY")
+  endif()
+  if((DEP_ARTIFACT OR DEP_INCLUDE_DIRS) AND NOT DEP_BUILD STREQUAL "ISOLATED")
+    _cppdeps_fatal("${DEP_NAME}: ARTIFACT and INCLUDE_DIRS require isolated build")
   endif()
   if(NOT DEP_SORT)
     set(DEP_SORT "VERSION_DESC")
@@ -264,6 +276,9 @@ function(cppdeps_add)
   set_property(GLOBAL PROPERTY "CPPDEPS_${norm}_BUILD" "${DEP_BUILD}")
   set_property(GLOBAL PROPERTY "CPPDEPS_${norm}_SORT" "${DEP_SORT}")
   set_property(GLOBAL PROPERTY "CPPDEPS_${norm}_CMAKE_OPTIONS" "${DEP_CMAKE_OPTIONS}")
+  foreach(k CONFIGURE_COMMAND BUILD_COMMAND INSTALL_COMMAND INCLUDE_DIRS ARTIFACT)
+    set_property(GLOBAL PROPERTY "CPPDEPS_${norm}_${k}" "${DEP_${k}}")
+  endforeach()
 
   foreach(k TAG BRANCH COMMIT HEAD_OF_BRANCH TAG_REGEX)
     if(DEP_${k})
@@ -461,8 +476,8 @@ function(_cppdeps_checkout_one name)
 
   if(DEFINED DEP_${norm}_SOURCE_DIR)
     set(src "${DEP_${norm}_SOURCE_DIR}")
-    if(NOT EXISTS "${src}/CMakeLists.txt")
-      _cppdeps_fatal("${name}: DEP_${norm}_SOURCE_DIR does not look like a CMake source dir: ${src}")
+    if(NOT IS_DIRECTORY "${src}")
+      _cppdeps_fatal("${name}: DEP_${norm}_SOURCE_DIR is not a directory: ${src}")
     endif()
     set_property(GLOBAL PROPERTY "CPPDEPS_${norm}_SOURCE_DIR" "${src}")
     _cppdeps_msg("${name}: using local source override ${src}")
@@ -535,6 +550,115 @@ function(_cppdeps_apply_cmake_options name)
   endforeach()
 endfunction()
 
+# Isolated builds are deliberately build-time operations. Their artifacts must
+# be declared explicitly; we do not guess target names or static-link closure.
+function(_cppdeps_make_isolated name src provides)
+  include(ExternalProject)
+  _cppdeps_norm_name(norm "${name}")
+  set(binary_dir "${CPPDEPS_ROOT}/isolated/build/${name}")
+  set(install_dir "${CPPDEPS_ROOT}/isolated/install/${name}")
+  file(MAKE_DIRECTORY "${binary_dir}" "${install_dir}")
+
+  foreach(k CONFIGURE_COMMAND BUILD_COMMAND INSTALL_COMMAND INCLUDE_DIRS ARTIFACT)
+    get_property(value GLOBAL PROPERTY "CPPDEPS_${norm}_${k}")
+    set(custom_${k} "${value}")
+  endforeach()
+  get_property(options GLOBAL PROPERTY "CPPDEPS_${norm}_CMAKE_OPTIONS")
+  set(cmake_args "-DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>")
+  foreach(pair IN LISTS options)
+    if(NOT pair MATCHES "^([^=]+)=(.*)$")
+      _cppdeps_fatal("${name}: CMAKE_OPTIONS must use KEY=VALUE, got '${pair}'")
+    endif()
+    list(APPEND cmake_args "-D${CMAKE_MATCH_1}=${CMAKE_MATCH_2}")
+  endforeach()
+
+  # ExternalProject's defaults are CMake-native. For non-CMake sources every
+  # phase must be custom, except optional configure/install no-op phases.
+  if(NOT EXISTS "${src}/CMakeLists.txt")
+    if(NOT custom_BUILD_COMMAND)
+      _cppdeps_fatal("${name}: isolated non-CMake project requires BUILD_COMMAND")
+    endif()
+    if(NOT custom_CONFIGURE_COMMAND)
+      set(custom_CONFIGURE_COMMAND "${CMAKE_COMMAND};-E;true")
+    endif()
+    if(NOT custom_INSTALL_COMMAND)
+      set(custom_INSTALL_COMMAND "${CMAKE_COMMAND};-E;true")
+    endif()
+  endif()
+
+  set(ep_args
+    PREFIX "${CPPDEPS_ROOT}/isolated/prefix/${name}"
+    SOURCE_DIR "${src}"
+    BINARY_DIR "${binary_dir}"
+    INSTALL_DIR "${install_dir}"
+    DOWNLOAD_COMMAND ""
+    UPDATE_COMMAND ""
+    PATCH_COMMAND ""
+    CMAKE_ARGS ${cmake_args}
+    BUILD_ALWAYS FALSE
+  )
+  foreach(phase CONFIGURE BUILD INSTALL)
+    if(custom_${phase}_COMMAND)
+      list(APPEND ep_args "${phase}_COMMAND" ${custom_${phase}_COMMAND})
+    endif()
+  endforeach()
+  set(ep_target "cppdeps_ep_${norm}")
+  if(TARGET "${ep_target}")
+    _cppdeps_fatal("${name}: isolated ExternalProject target already exists: ${ep_target}")
+  endif()
+  # Ninja requires an explicit producer rule for imported artifacts.
+  # The ExternalProject build step owns the complete configure/build/install
+  # chain, so declare the installed artifact as a byproduct of that chain.
+  if(provides AND custom_ARTIFACT)
+    set(byproduct "${custom_ARTIFACT}")
+    string(REPLACE "<SOURCE_DIR>" "${src}" byproduct "${byproduct}")
+    string(REPLACE "<BINARY_DIR>" "${binary_dir}" byproduct "${byproduct}")
+    string(REPLACE "<INSTALL_DIR>" "${install_dir}" byproduct "${byproduct}")
+    if(NOT IS_ABSOLUTE "${byproduct}")
+      set(byproduct "${install_dir}/${byproduct}")
+    endif()
+    list(APPEND ep_args BUILD_BYPRODUCTS "${byproduct}")
+  endif()
+  ExternalProject_Add("${ep_target}" ${ep_args})
+
+  if(provides)
+    list(LENGTH provides n_provides)
+    if(NOT n_provides EQUAL 1)
+      _cppdeps_fatal("${name}: isolated mode currently supports one PROVIDES target")
+    endif()
+    if(NOT custom_ARTIFACT)
+      _cppdeps_fatal("${name}: isolated PROVIDES requires ARTIFACT (path relative to install directory or absolute path)")
+    endif()
+    list(GET provides 0 public_target)
+    if(TARGET "${public_target}")
+      _cppdeps_fatal("${name}: target '${public_target}' already exists")
+    endif()
+    set(artifact "${custom_ARTIFACT}")
+    string(REPLACE "<SOURCE_DIR>" "${src}" artifact "${artifact}")
+    string(REPLACE "<BINARY_DIR>" "${binary_dir}" artifact "${artifact}")
+    string(REPLACE "<INSTALL_DIR>" "${install_dir}" artifact "${artifact}")
+    if(NOT IS_ABSOLUTE "${artifact}")
+      set(artifact "${install_dir}/${artifact}")
+    endif()
+    get_filename_component(artifact_parent "${artifact}" DIRECTORY)
+    file(MAKE_DIRECTORY "${artifact_parent}")
+    # TARGET name with :: is valid for an imported library.
+    add_library("${public_target}" UNKNOWN IMPORTED GLOBAL)
+    set_target_properties("${public_target}" PROPERTIES IMPORTED_LOCATION "${artifact}")
+    add_dependencies("${public_target}" "${ep_target}")
+    foreach(dir IN LISTS custom_INCLUDE_DIRS)
+      string(REPLACE "<SOURCE_DIR>" "${src}" dir "${dir}")
+      string(REPLACE "<BINARY_DIR>" "${binary_dir}" dir "${dir}")
+      string(REPLACE "<INSTALL_DIR>" "${install_dir}" dir "${dir}")
+      if(NOT IS_ABSOLUTE "${dir}")
+        set(dir "${install_dir}/${dir}")
+      endif()
+      file(MAKE_DIRECTORY "${dir}")
+      set_property(TARGET "${public_target}" APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${dir}")
+    endforeach()
+  endif()
+endfunction()
+
 function(_cppdeps_make_available_one name)
   _cppdeps_norm_name(norm "${name}")
   get_property(src GLOBAL PROPERTY "CPPDEPS_${norm}_SOURCE_DIR")
@@ -556,6 +680,8 @@ function(_cppdeps_make_available_one name)
     if(NOT TARGET "${target}")
       add_library("${target}" ALIAS "cppdeps_${name}")
     endif()
+  elseif(build STREQUAL "ISOLATED")
+    _cppdeps_make_isolated("${name}" "${src}" "${provides}")
   elseif(build STREQUAL "CMAKE_ADD_SUBDIRECTORY")
     _cppdeps_apply_cmake_options("${name}")
     add_subdirectory("${src}" "${CPPDEPS_ROOT}/build/${name}" EXCLUDE_FROM_ALL)

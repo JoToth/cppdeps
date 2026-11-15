@@ -34,15 +34,23 @@ if(PROJECT_IS_TOP_LEVEL
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/bootstrap_latest_tag.cmake
   )
   add_test(NAME cppdeps_bootstrap_fetch_integration
-    COMMAND "${CMAKE_COMMAND}"
-      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
-      -P "${CMAKE_CURRENT_LIST_DIR}/tests/bootstrap_fetch_integration.cmake"
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/bootstrap_fetch_integration.cmake
   )
   add_test(NAME cppdeps_local_override_offline
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/local_override_offline.cmake
   )
   add_test(NAME cppdeps_dirty_checkout
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/dirty_checkout.cmake
+  )
+  add_test(NAME cppdeps_isolated_integration
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_integration.cmake"
+  )
+  add_test(NAME cppdeps_isolated_custom_command
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_custom_command.cmake"
   )
   set_tests_properties(cppdeps_conflict_fail PROPERTIES WILL_FAIL TRUE)
 endif()
