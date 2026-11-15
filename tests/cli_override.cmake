@@ -11,6 +11,11 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/CppDeps.cmake")
 set(CPPDEPS_ROOT "${CMAKE_CURRENT_BINARY_DIR}/tmp/override_cppdeps" CACHE PATH "" FORCE)
 set(CPPDEPS_LOCKFILE "${CMAKE_CURRENT_BINARY_DIR}/tmp/override.lock.cmake" CACHE FILEPATH "" FORCE)
 
+# Start from a clean test state. On failure, artifacts are intentionally kept
+# for debugging; the next test run removes them here.
+file(REMOVE_RECURSE "${CPPDEPS_ROOT}")
+file(REMOVE "${CPPDEPS_LOCKFILE}")
+
 cppdeps_test_make_repo(repo v1 v2)
 set(DEP_TESTDEP_REF "tag:v2.0.0" CACHE STRING "" FORCE)
 cppdeps_add(NAME testdep GIT_REPOSITORY "${repo}" TAG v1.0.0 BUILD NONE)
@@ -21,3 +26,8 @@ file(READ "${CPPDEPS_ROOT}/src/testdep/value.txt" value)
 if(NOT value STREQUAL "v2\n")
   message(FATAL_ERROR "CLI override did not select v2; got '${value}'")
 endif()
+
+# Successful tests leave no checkout/lockfile footprint behind.
+file(REMOVE_RECURSE "${CPPDEPS_ROOT}")
+file(REMOVE "${CPPDEPS_LOCKFILE}")
+

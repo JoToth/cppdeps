@@ -12,7 +12,19 @@ project(cppdeps_basic_example LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/CppDeps.cmake)
+set(CPPDEPS_BOOTSTRAP_URL
+  "https://raw.githubusercontent.com/JoToth/cppdeps/main/bootstrap/cppdeps-bootstrap.cmake"
+  CACHE STRING "CppDeps bootstrap URL"
+)
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_cppdeps")
+file(DOWNLOAD
+  "${CPPDEPS_BOOTSTRAP_URL}"
+  "${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake"
+  TLS_VERIFY ON
+)
+include("${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake")
+
 include(${CMAKE_CURRENT_LIST_DIR}/deps.cmake)
 
 cppdeps_install_all(WRITE_LOCKFILE)

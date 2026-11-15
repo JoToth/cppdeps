@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026, Jozsef Toth
+cmake_minimum_required(VERSION 3.20)
+include("${CMAKE_CURRENT_LIST_DIR}/git_helpers.cmake")
+get_filename_component(_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(_work "${CMAKE_CURRENT_BINARY_DIR}/tmp/bootstrap_fetch_integration")
+set(_repo "${_work}/repo")
+set(_consumer "${_work}/consumer")
+set(_build "${_work}/build")
+file(REMOVE_RECURSE "${_work}")
+file(MAKE_DIRECTORY "${_repo}/bootstrap" "${_repo}/cmake" "${_consumer}")
+file(COPY "${_root}/bootstrap/cppdeps-bootstrap.cmake" DESTINATION "${_repo}/bootstrap")
+file(COPY "${_root}/cmake/CppDeps.cmake" "${_root}/cmake/CppDepsBootstrap.cmake" DESTINATION "${_repo}/cmake")
+file(WRITE "${_repo}/CMakeLists.txt" "cmake_minimum_required(VERSION 3.20)\nproject(cppdeps LANGUAGES NONE)\n")
+cppdeps_test_run_git("${_repo}" init)
+cppdeps_test_run_git("${_repo}" config user.name "CppDeps Test")
+cppdeps_test_run_git("${_repo}" config user.email test@example.invalid)
+cppdeps_test_run_git("${_repo}" add .)
+cppdeps_test_run_git("${_repo}" commit -m initial)
+cppdeps_test_run_git("${_repo}" tag v1.0.4)
+cppdeps_test_run_git("${_repo}" tag v2.0.0-rc1)
+
+file(TO_CMAKE_PATH "${_root}/bootstrap/cppdeps-bootstrap.cmake" _bootstrap_path)
+file(WRITE "${_consumer}/CMakeLists.txt" "cmake_minimum_required(VERSION 3.20)\nproject(cppdeps_consumer LANGUAGES NONE)\ninclude(\"${_bootstrap_path}\")\nif(NOT COMMAND cppdeps_add)\n  message(FATAL_ERROR \"cppdeps_add not exported\")\nendif()\nif(NOT CPPDEPS_VERSION STREQUAL \"1.0.4\")\n  message(FATAL_ERROR \"CPPDEPS_VERSION not exported: '\${CPPDEPS_VERSION}'\")\nendif()\n")
+
+function(_configure)
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+      -G "${CPPDEPS_TEST_GENERATOR}"
+      -S "${_consumer}"
+      -B "${_build}"
+      "-DCPPDEPS_BOOTSTRAP_GIT_REPOSITORY:STRING=${_repo}"
+      ${ARGN}
+    RESULT_VARIABLE rc
+    OUTPUT_VARIABLE out
+    ERROR_VARIABLE err
+  )
+
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR
+      "FetchContent consumer configure failed:\n${out}\n${err}")
+  endif()
+endfunction()
+
+_configure()
+file(STRINGS "${_build}/CMakeCache.txt" tag_line REGEX "^CPPDEPS_BOOTSTRAP_RESOLVED_TAG:")
+if(NOT tag_line MATCHES "=v1.0.4$")
+  message(FATAL_ERROR "Expected stable tag v1.0.4, got ${tag_line}")
+endif()
+# A newer stable release must not silently upgrade an already configured consumer.
+cppdeps_test_run_git("${_repo}" tag v1.0.5)
+_configure()
+file(STRINGS "${_build}/CMakeCache.txt" tag_line REGEX "^CPPDEPS_BOOTSTRAP_RESOLVED_TAG:")
+if(NOT tag_line MATCHES "=v1.0.4$")
+  message(FATAL_ERROR "Reconfigure unexpectedly changed selected tag: ${tag_line}")
+endif()
+# Refresh should upgrade deliberately.
+_configure(-DCPPDEPS_BOOTSTRAP_REFRESH_TAG:BOOL=ON)
+file(STRINGS "${_build}/CMakeCache.txt" tag_line REGEX "^CPPDEPS_BOOTSTRAP_RESOLVED_TAG:")
+if(NOT tag_line MATCHES "=v1.0.5$")
+  message(FATAL_ERROR "Refresh did not select v1.0.5: ${tag_line}")
+endif()
+file(REMOVE_RECURSE "${_work}")
+message(STATUS "bootstrap FetchContent integration test passed")

@@ -11,6 +11,11 @@ cppdeps_test_make_repo(repo v1 v2)
 set(lock "${CMAKE_CURRENT_BINARY_DIR}/tmp/roundtrip.lock.cmake")
 set(root "${CMAKE_CURRENT_BINARY_DIR}/tmp/roundtrip_cppdeps")
 
+# Start from a clean test state. On failure, artifacts are intentionally kept
+# for debugging; the next test run removes them here.
+file(REMOVE_RECURSE "${root}")
+file(REMOVE "${lock}")
+
 # First run: resolve branch head and write lock. The repo is already at v2.
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -DTEST_REPO=${repo} -DTEST_LOCK=${lock} -DTEST_ROOT=${root} -P "${CMAKE_CURRENT_LIST_DIR}/resolve_and_lock.cmake"
@@ -47,3 +52,21 @@ file(READ "${root}/src/testdep/value.txt" locked_value)
 if(NOT locked_value STREQUAL "v2\n")
   message(FATAL_ERROR "strict lock checkout drifted; expected v2, got '${locked_value}', v3 was ${v3}")
 endif()
+
+# A lock belonging to another repository must never be reused, even offline.
+set(alternate_repo "${repo}-different")
+file(REMOVE_RECURSE "${alternate_repo}")
+file(COPY "${repo}/" DESTINATION "${alternate_repo}")
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -DCPPDEPS_STRICT_LOCK=ON -DTEST_REPO=${alternate_repo} -DTEST_LOCK=${lock} -DTEST_ROOT=${root} -P "${CMAKE_CURRENT_LIST_DIR}/resolve_and_lock.cmake"
+  RESULT_VARIABLE mismatch_rc OUTPUT_VARIABLE mismatch_out ERROR_VARIABLE mismatch_err
+)
+if(mismatch_rc EQUAL 0 OR NOT "${mismatch_out}${mismatch_err}" MATCHES "lockfile repository mismatch")
+  message(FATAL_ERROR "Expected lockfile repository mismatch, got: ${mismatch_out} ${mismatch_err}")
+endif()
+file(REMOVE_RECURSE "${alternate_repo}")
+
+# Successful tests leave no checkout/lockfile footprint behind.
+file(REMOVE_RECURSE "${root}")
+file(REMOVE "${lock}")
+

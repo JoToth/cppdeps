@@ -26,13 +26,99 @@ Older Git versions may fail with commit-based fetches, tag resolution, or MSYS p
 
 ## Install
 
-Vendor this repository or copy `cmake/CppDeps.cmake` into your project:
+Recommended: download the standalone bootstrapper and let it fetch cppdeps:
+
+```cmake
+set(CPPDEPS_BOOTSTRAP_URL
+  "https://raw.githubusercontent.com/JoToth/cppdeps/main/bootstrap/cppdeps-bootstrap.cmake"
+  CACHE STRING "CppDeps bootstrap URL"
+)
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_cppdeps")
+file(DOWNLOAD
+  "${CPPDEPS_BOOTSTRAP_URL}"
+  "${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake"
+  TLS_VERIFY ON
+)
+include("${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake")
+```
+
+By default, the standalone bootstrapper queries the configured Git repository for
+stable numeric release tags and fetches the newest matching tag on the first configure. It does **not** track `main`
+unless you explicitly ask it to. The selected tag is cached across reconfiguration;
+set `CPPDEPS_BOOTSTRAP_REFRESH_TAG=ON` to check for a newer release.
+
+To pin a specific version, branch, or commit:
+
+```cmake
+set(CPPDEPS_BOOTSTRAP_GIT_TAG "v1.0.4" CACHE STRING "" FORCE)
+```
+
+To use a fork or an internal mirror:
+
+```cmake
+set(CPPDEPS_BOOTSTRAP_GIT_REPOSITORY
+  "https://git.example.com/tooling/cppdeps.git"
+  CACHE STRING
+  "Git repository used by the cppdeps bootstrapper"
+)
+```
+
+The tag filter is configurable as well:
+
+```cmake
+set(CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX
+  "^v?[0-9]+(\\.[0-9]+)*$"
+  CACHE STRING
+  "Release tags accepted by the cppdeps bootstrapper"
+)
+```
+
+Bootstrap configuration variables:
+
+- `CPPDEPS_BOOTSTRAP_URL` — location of the standalone bootstrap script used by
+  the consumer project. This variable belongs to the consumer-side download
+  snippet, so it can point to GitHub, a fork, or an internal HTTP mirror.
+- `CPPDEPS_BOOTSTRAP_GIT_REPOSITORY` — Git repository fetched by the bootstrapper.
+- `CPPDEPS_BOOTSTRAP_GIT_TAG` — explicit tag, branch, or commit. When empty, the
+  latest matching remote tag is selected.
+- `CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX` — regex used when selecting the latest stable tag.
+- `CPPDEPS_BOOTSTRAP_REFRESH_TAG` — query the remote again and update the cached tag on configure.
+- `CPPDEPS_BOOTSTRAP_SOURCE_DIR` — existing local cppdeps source tree; bypasses
+  network fetching entirely.
+
+When using `DEP_<NAME>_SOURCE_DIR` for an individual dependency, CppDeps
+skips Git resolution for that dependency, including in offline/strict-lock mode.
+Local source overrides do not produce Git commit entries in the lockfile.
+
+For fully offline or vendored use:
+
+```cmake
+set(CPPDEPS_BOOTSTRAP_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/external/cppdeps" CACHE PATH "" FORCE)
+include("${CMAKE_CURRENT_LIST_DIR}/external/cppdeps/bootstrap/cppdeps-bootstrap.cmake")
+```
+
+The fetched repository then loads its internal module entry point:
+
+```cmake
+include("${cppdeps_SOURCE_DIR}/cmake/CppDepsBootstrap.cmake")
+```
+
+For vendored use without the standalone bootstrapper:
 
 ```text
 my-project/
-  cmake/CppDeps.cmake
+  external/cppdeps/
+    cmake/CppDepsBootstrap.cmake
+    cmake/CppDeps.cmake
   deps.cmake
   CMakeLists.txt
+```
+
+Then:
+
+```cmake
+include(external/cppdeps/cmake/CppDepsBootstrap.cmake)
 ```
 
 ## Minimal usage
@@ -58,7 +144,7 @@ cppdeps_add(
 cmake_minimum_required(VERSION 3.20)
 project(my_app LANGUAGES CXX)
 
-include(cmake/CppDeps.cmake)
+# The bootstrap snippet from the Install section has already loaded cppdeps.
 include(deps.cmake)
 
 cppdeps_install_all(WRITE_LOCKFILE)
@@ -252,3 +338,7 @@ Potential v1.x / v2 items:
 ## License
 
 BSD 3-Clause License
+
+## Known issues
+
+See [KNOWN_ISSUES.md](KNOWN_ISSUES.md), especially the section on recursive / nested CppDeps use and multi-version limitations.
