@@ -10,4 +10,7 @@ if(NOT COMMAND cppdeps_add)
 endif()
 
 
+if(NOT CPPDEPS_VERSION STREQUAL "1.0.4")
+  message(FATAL_ERROR "cppdeps version was not available in the including scope: '${CPPDEPS_VERSION}'")
+endif()
 message(STATUS "remote bootstrap test passed")

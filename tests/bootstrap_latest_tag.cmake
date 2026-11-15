@@ -16,8 +16,8 @@ set(_ls_remote_output "
 _cppdeps_bootstrap_tags_from_ls_remote("${_ls_remote_output}" _tags)
 _cppdeps_bootstrap_select_latest_tag("${_tags}" _latest)
 
-if(NOT _latest STREQUAL "v2.0.0-rc1")
-  message(FATAL_ERROR "Expected latest tag v2.0.0-rc1, got '${_latest}' from '${_tags}'")
+if(NOT _latest STREQUAL "v1.0.10")
+  message(FATAL_ERROR "Expected latest stable tag v1.0.10, got '${_latest}' from '${_tags}'")
 endif()
 
 set(CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX "^v[0-9]+\\.[0-9]+\\.[0-9]+$" CACHE STRING "" FORCE)

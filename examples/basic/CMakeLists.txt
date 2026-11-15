@@ -14,31 +14,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CPPDEPS_BOOTSTRAP_URL
   "https://raw.githubusercontent.com/JoToth/cppdeps/main/bootstrap/cppdeps-bootstrap.cmake"
-  CACHE STRING
-  "URL of the cppdeps standalone bootstrapper"
+  CACHE STRING "CppDeps bootstrap URL"
 )
 
-set(_cppdeps_bootstrap_dir "${CMAKE_BINARY_DIR}/_cppdeps")
-set(_cppdeps_bootstrap "${_cppdeps_bootstrap_dir}/cppdeps-bootstrap.cmake")
-
-file(MAKE_DIRECTORY "${_cppdeps_bootstrap_dir}")
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_cppdeps")
 file(DOWNLOAD
   "${CPPDEPS_BOOTSTRAP_URL}"
-  "${_cppdeps_bootstrap}"
+  "${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake"
   TLS_VERIFY ON
-  STATUS _cppdeps_bootstrap_status
 )
+include("${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake")
 
-list(GET _cppdeps_bootstrap_status 0 _cppdeps_bootstrap_status_code)
-if(NOT _cppdeps_bootstrap_status_code EQUAL 0)
-  list(GET _cppdeps_bootstrap_status 1 _cppdeps_bootstrap_status_message)
-  message(FATAL_ERROR
-    "Failed to download cppdeps bootstrapper from ${CPPDEPS_BOOTSTRAP_URL}: "
-    "${_cppdeps_bootstrap_status_message}"
-  )
-endif()
-
-include("${_cppdeps_bootstrap}")
 include(${CMAKE_CURRENT_LIST_DIR}/deps.cmake)
 
 cppdeps_install_all(WRITE_LOCKFILE)

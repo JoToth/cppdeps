@@ -38,6 +38,15 @@ if(NOT value STREQUAL "v1\n")
   message(FATAL_ERROR "checkout value mismatch: expected v1, got '${value}'")
 endif()
 
+# An annotated highest tag must resolve to the underlying commit, not a tag object.
+cppdeps_test_run_git("${repo}" tag -a v2.1.0 -m "annotated release")
+cppdeps_add(NAME annotated GIT_REPOSITORY "${repo}" HIGHEST_TAG BUILD NONE)
+_cppdeps_resolve_ref(annotated)
+get_property(annotated_commit GLOBAL PROPERTY CPPDEPS_ANNOTATED_RESOLVED_COMMIT)
+if(NOT annotated_commit STREQUAL v2)
+  message(FATAL_ERROR "annotated tag resolved to '${annotated_commit}', expected commit '${v2}'")
+endif()
+
 # Successful tests leave no checkout/lockfile footprint behind.
 file(REMOVE_RECURSE "${CPPDEPS_ROOT}")
 file(REMOVE "${CPPDEPS_LOCKFILE}")

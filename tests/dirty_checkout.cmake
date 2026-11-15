@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026, Jozsef Toth
+cmake_minimum_required(VERSION 3.20)
+include("${CMAKE_CURRENT_LIST_DIR}/git_helpers.cmake")
+get_filename_component(_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+cppdeps_test_make_repo(repo v1 v2)
+set(_work "${CMAKE_CURRENT_BINARY_DIR}/tmp/dirty_checkout")
+file(REMOVE_RECURSE "${_work}")
+file(MAKE_DIRECTORY "${_work}/src")
+cppdeps_test_run_git("${_work}/src" clone "${repo}" testdep)
+cppdeps_test_run_git("${_work}/src/testdep" checkout --detach "${v1}")
+file(WRITE "${_work}/src/testdep/value.txt" "local modification\n")
+# Child invocation must fail instead of switching a modified checkout to v2.
+set(_script "${_work}/attempt.cmake")
+file(WRITE "${_script}" "set(CPPDEPS_ROOT \"${_work}\" CACHE PATH \"\" FORCE)\ninclude(\"${_root}/cmake/CppDeps.cmake\")\ncppdeps_add(NAME testdep GIT_REPOSITORY \"${repo}\" COMMIT \"${v2}\" BUILD NONE)\ncppdeps_resolve_all()\ncppdeps_checkout_all()\n")
+execute_process(COMMAND "${CMAKE_COMMAND}" -P "${_script}"
+  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(rc EQUAL 0 OR NOT "${out}${err}" MATCHES "refusing to switch dirty dependency checkout")
+  message(FATAL_ERROR "Expected dirty checkout safety failure, got:\n${out}\n${err}")
+endif()
+file(READ "${_work}/src/testdep/value.txt" value)
+if(NOT value STREQUAL "local modification\n")
+  message(FATAL_ERROR "Dirty checkout modified user data unexpectedly")
+endif()
+file(REMOVE_RECURSE "${_work}")

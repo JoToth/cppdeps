@@ -4,19 +4,13 @@
 # included, it fetches the full cppdeps repository and includes the real
 # in-repository bootstrap module from there.
 #
-# Typical use:
-#   set(CPPDEPS_BOOTSTRAP_URL
-#     "https://raw.githubusercontent.com/JoToth/cppdeps/main/bootstrap/cppdeps-bootstrap.cmake"
-#     CACHE STRING "URL of the cppdeps standalone bootstrapper."
-#   )
-#   file(DOWNLOAD
-#     "${CPPDEPS_BOOTSTRAP_URL}"
-#     "${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake"
-#     TLS_VERIFY ON
-#   )
+# Typical use (see README.md for the complete snippet):
+#   file(DOWNLOAD "https://raw.githubusercontent.com/JoToth/cppdeps/main/bootstrap/cppdeps-bootstrap.cmake"
+#     "${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake" TLS_VERIFY ON)
 #   include("${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake")
+# Note: the destination directory must exist before downloading.
 #
-# By default, the bootstrapper fetches the newest remote tag. Override
+# By default, the bootstrapper selects the newest stable numeric remote tag. Override
 # CPPDEPS_BOOTSTRAP_GIT_TAG only when pinning a specific tag, branch, or commit.
 
 # SPDX-License-Identifier: BSD-3-Clause
@@ -43,7 +37,7 @@ set(CPPDEPS_BOOTSTRAP_GIT_TAG
 )
 
 set(CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX
-  "^v?[0-9]+(\\.[0-9]+)*([._+-].*)?$"
+  "^v?[0-9]+(\\.[0-9]+)*$"
   CACHE STRING
   "Regex used to select release-like tags when CPPDEPS_BOOTSTRAP_GIT_TAG is empty."
 )
@@ -52,6 +46,10 @@ set(CPPDEPS_BOOTSTRAP_SOURCE_DIR
   ""
   CACHE PATH
   "Use an existing cppdeps source tree instead of fetching one. Useful for tests, vendoring, and offline builds."
+)
+
+option(CPPDEPS_BOOTSTRAP_REFRESH_TAG
+  "Re-query the remote for the latest matching cppdeps release tag." OFF
 )
 
 
@@ -96,6 +94,17 @@ function(_cppdeps_bootstrap_resolve_git_tag out_var)
     return()
   endif()
 
+  # Cache both the chosen tag and its selection inputs for reproducible reconfigure.
+  # Set CPPDEPS_BOOTSTRAP_REFRESH_TAG=ON to deliberately upgrade.
+  if(NOT CPPDEPS_BOOTSTRAP_REFRESH_TAG
+     AND DEFINED CPPDEPS_BOOTSTRAP_RESOLVED_TAG
+     AND NOT "${CPPDEPS_BOOTSTRAP_RESOLVED_TAG}" STREQUAL ""
+     AND "${CPPDEPS_BOOTSTRAP_RESOLVED_REPOSITORY}" STREQUAL "${CPPDEPS_BOOTSTRAP_GIT_REPOSITORY}"
+     AND "${CPPDEPS_BOOTSTRAP_RESOLVED_REGEX}" STREQUAL "${CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX}")
+    set(${out_var} "${CPPDEPS_BOOTSTRAP_RESOLVED_TAG}" PARENT_SCOPE)
+    return()
+  endif()
+
   find_package(Git QUIET)
   if(NOT GIT_FOUND)
     message(FATAL_ERROR
@@ -129,11 +138,17 @@ function(_cppdeps_bootstrap_resolve_git_tag out_var)
     )
   endif()
 
+  set(CPPDEPS_BOOTSTRAP_RESOLVED_TAG "${resolved_tag}" CACHE INTERNAL
+    "Last automatically selected cppdeps bootstrap release" FORCE)
+  set(CPPDEPS_BOOTSTRAP_RESOLVED_REPOSITORY "${CPPDEPS_BOOTSTRAP_GIT_REPOSITORY}" CACHE INTERNAL
+    "Repository used to choose the cppdeps release" FORCE)
+  set(CPPDEPS_BOOTSTRAP_RESOLVED_REGEX "${CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX}" CACHE INTERNAL
+    "Regex used to choose the cppdeps release" FORCE)
   message(STATUS "cppdeps bootstrap: resolved latest tag: ${resolved_tag}")
   set(${out_var} "${resolved_tag}" PARENT_SCOPE)
 endfunction()
 
-function(_cppdeps_bootstrap_include_from_source source_dir)
+macro(_cppdeps_bootstrap_include_from_source source_dir)
   if(NOT EXISTS "${source_dir}/cmake/CppDepsBootstrap.cmake")
     message(FATAL_ERROR
       "CPPDEPS bootstrap source does not contain cmake/CppDepsBootstrap.cmake: ${source_dir}"
@@ -141,7 +156,7 @@ function(_cppdeps_bootstrap_include_from_source source_dir)
   endif()
 
   include("${source_dir}/cmake/CppDepsBootstrap.cmake")
-endfunction()
+endmacro()
 
 if(CPPDEPS_BOOTSTRAP_SOURCE_DIR)
   _cppdeps_bootstrap_include_from_source("${CPPDEPS_BOOTSTRAP_SOURCE_DIR}")

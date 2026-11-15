@@ -31,22 +31,22 @@ Recommended: download the standalone bootstrapper and let it fetch cppdeps:
 ```cmake
 set(CPPDEPS_BOOTSTRAP_URL
   "https://raw.githubusercontent.com/JoToth/cppdeps/main/bootstrap/cppdeps-bootstrap.cmake"
-  CACHE STRING
-  "URL of the cppdeps standalone bootstrapper"
+  CACHE STRING "CppDeps bootstrap URL"
 )
 
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_cppdeps")
 file(DOWNLOAD
   "${CPPDEPS_BOOTSTRAP_URL}"
   "${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake"
   TLS_VERIFY ON
 )
-
 include("${CMAKE_BINARY_DIR}/_cppdeps/cppdeps-bootstrap.cmake")
 ```
 
 By default, the standalone bootstrapper queries the configured Git repository for
-release-like tags and fetches the newest matching tag. It does **not** track `main`
-unless you explicitly ask it to.
+stable numeric release tags and fetches the newest matching tag on the first configure. It does **not** track `main`
+unless you explicitly ask it to. The selected tag is cached across reconfiguration;
+set `CPPDEPS_BOOTSTRAP_REFRESH_TAG=ON` to check for a newer release.
 
 To pin a specific version, branch, or commit:
 
@@ -82,9 +82,14 @@ Bootstrap configuration variables:
 - `CPPDEPS_BOOTSTRAP_GIT_REPOSITORY` — Git repository fetched by the bootstrapper.
 - `CPPDEPS_BOOTSTRAP_GIT_TAG` — explicit tag, branch, or commit. When empty, the
   latest matching remote tag is selected.
-- `CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX` — regex used when selecting the latest tag.
+- `CPPDEPS_BOOTSTRAP_GIT_TAG_REGEX` — regex used when selecting the latest stable tag.
+- `CPPDEPS_BOOTSTRAP_REFRESH_TAG` — query the remote again and update the cached tag on configure.
 - `CPPDEPS_BOOTSTRAP_SOURCE_DIR` — existing local cppdeps source tree; bypasses
   network fetching entirely.
+
+When using `DEP_<NAME>_SOURCE_DIR` for an individual dependency, CppDeps
+skips Git resolution for that dependency, including in offline/strict-lock mode.
+Local source overrides do not produce Git commit entries in the lockfile.
 
 For fully offline or vendored use:
 
@@ -333,3 +338,7 @@ Potential v1.x / v2 items:
 ## License
 
 BSD 3-Clause License
+
+## Known issues
+
+See [KNOWN_ISSUES.md](KNOWN_ISSUES.md), especially the section on recursive / nested CppDeps use and multi-version limitations.
