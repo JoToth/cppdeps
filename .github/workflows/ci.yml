@@ -25,8 +25,26 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          install: git cmake ninja
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-gcc
+      - name: Verify UCRT64 toolchain
+        run: |
+          echo "MSYSTEM=$MSYSTEM"
+          for tool in cmake ninja gcc g++; do
+            command -v "$tool" || exit 1
+          done
+          g++ --version
+          cmake --version
       - name: Configure
         run: cmake -S . -B build -G Ninja -DBUILD_TESTING=ON
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          compiler="$(command -v g++)"
+          [[ "$compiler" == *.exe ]] || compiler="${compiler}.exe"
+          export CXX="$(cygpath -m "$compiler")"
+          echo "Using C++ compiler: $CXX"
+          "$CXX" --version
+          ctest --test-dir build --output-on-failure
