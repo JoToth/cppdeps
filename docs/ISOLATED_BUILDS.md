@@ -58,33 +58,111 @@ underlying `ExternalProject` supports `<SOURCE_DIR>`, `<BINARY_DIR>`, and
 ## Important limitations
 
 - Isolated builds run at **build time**, not at consumer configure time.
-- Up to **one imported target** can be declared using `PROVIDES` and `ARTIFACT`.
+- The legacy `ARTIFACT` accepts one imported target; `ARTIFACTS` supports multiple explicitly mapped targets.
 - CppDeps does **not** infer artifacts, target names, C++ ABI compatibility,
   or transitive static-link dependencies.
 - A custom, non-CMake source requires a `BUILD_COMMAND`; absent configure or
   install commands become no-ops.
-- Multi-config builds, cross-compilation toolchains and package-config based
-  discovery need additional integration testing before production use.
+- Configuration-specific builds are tested with Ninja Multi-Config on Linux;
+  cross-compilation toolchains and package-config discovery remain experimental.
 - The top-level CMake tests remain independent from isolated dependency tests.
 - Dependency Git resolution, checkout and lockfile behavior are unchanged.
 
 ## Imported-target contract validation
 
-A single isolated dependency can currently publish **one** imported library
-with `PROVIDES <target>` and `ARTIFACT <file>`. When `PROVIDES` is specified,
-`ARTIFACT` is required. Conversely, `ARTIFACT` and `INCLUDE_DIRS` have no
-meaning without `PROVIDES` and are rejected. Reusing an existing target name,
-providing multiple target names, or specifying an artifact that resolves to a
-directory is also an error.
+The legacy `ARTIFACT` declaration publishes one imported library with
+`PROVIDES <target>` and `ARTIFACT <file>`. For multiple targets use
+`ARTIFACTS <target>=<file> ...`. `PROVIDES` requires one of these artifact
+forms; neither artifact form nor `INCLUDE_DIRS` is valid without `PROVIDES`.
+Reusing a target name or specifying an artifact that resolves to a directory
+is an error.
 
-Both `ARTIFACT` and `INCLUDE_DIRS` accept paths relative to the isolated
+Both artifact forms and `INCLUDE_DIRS` accept paths relative to the isolated
 installation prefix, absolute paths, or the explicit `<SOURCE_DIR>`,
 `<BINARY_DIR>` and `<INSTALL_DIR>` placeholders. Resolved paths are normalized;
 duplicate include directories are removed. CppDeps creates declared include
 directories during configuration because CMake validates imported targets
 before the isolated build has installed headers.
 
-The declared artifact must actually be produced by the isolated build/install
+Declared artifacts must actually be produced by the isolated build/install
 commands. CppDeps does not create library files, infer transitive dependencies,
-or independently validate ABI compatibility. Multiple provided libraries and
-per-configuration artifact locations remain future work.
+or independently validate ABI compatibility. Per-configuration artifact
+locations can be declared explicitly through `CONFIG_ARTIFACTS`.
+
+## Multiple imported libraries from one isolated build
+
+An isolated dependency may now publish multiple imported libraries using explicit
+`target=artifact` mappings. The existing single-target `ARTIFACT` syntax remains
+supported without changes.
+
+```cmake
+cppdeps_add(
+  NAME example
+  GIT_REPOSITORY https://example.invalid/example.git
+  TAG v1.0
+  ISOLATED
+  PROVIDES example::core example::utils
+  ARTIFACTS
+    example::core=lib/libcore.a
+    example::utils=lib/libutils.a
+  INCLUDE_DIRS include
+)
+cppdeps_install_all()
+```
+
+`ARTIFACTS` must define exactly one entry for each `PROVIDES` target. The mapping
+order does not matter. Duplicate, unknown or missing target mappings, duplicate
+artifact paths, and mixing `ARTIFACT` with `ARTIFACTS` are configuration errors.
+Every artifact path follows the same absolute/install-relative and placeholder
+rules as the legacy `ARTIFACT` argument. All mapped artifacts are declared as
+`ExternalProject` build byproducts, and each imported target depends on the
+same isolated build. `INCLUDE_DIRS` is shared across all provided targets.
+
+Each imported library is currently of type `UNKNOWN IMPORTED`; CppDeps does
+not infer inter-library link dependencies. Consumers must explicitly link all
+required libraries in an appropriate order. Artifact filenames are toolchain-
+specific.
+
+## Arbitrary configuration-specific artifact locations
+
+`CONFIG_ARTIFACTS` describes a *complete*, explicit artifact matrix for the
+consumer project's configurations. It accepts `config:target=path` entries,
+where configuration names are **not restricted** to `Debug` or `Release`.
+For example, `ASan`, `Coverage`, `Profiling` or `CustomOptimized` are valid.
+
+```cmake
+cppdeps_add(
+  NAME example
+  GIT_REPOSITORY https://example.invalid/example.git
+  TAG v1.0
+  ISOLATED
+  PROVIDES example::core example::utils
+  CONFIG_ARTIFACTS
+    "ASan:example::core=lib/<CONFIG>/libcore.a"
+    "ASan:example::utils=lib/<CONFIG>/libutils.a"
+    "Coverage:example::core=lib/<CONFIG>/libcore.a"
+    "Coverage:example::utils=lib/<CONFIG>/libutils.a"
+  INCLUDE_DIRS include
+)
+```
+
+- Configure Ninja Multi-Config consumers with
+  `-DCMAKE_CONFIGURATION_TYPES='ASan;Coverage'`, or configure a single-config
+  generator with `-DCMAKE_BUILD_TYPE=ASan`.
+- Every `PROVIDES` target must have **one artifact per active configuration**.
+  Missing/duplicate mappings, unknown targets, unknown configurations and
+  repeated artifact paths are errors. Configuration names are case-insensitive
+  for matching CMake's `IMPORTED_LOCATION_<CONFIG>` property names.
+- `<CONFIG>` inside a path is replaced with the configuration name from its
+  mapping. Other isolated path placeholders remain supported.
+- `CONFIG_ARTIFACTS` is mutually exclusive with `ARTIFACT` and `ARTIFACTS`.
+  The original API continues to work unchanged when `CONFIG_ARTIFACTS` is absent.
+- CppDeps populates `IMPORTED_CONFIGURATIONS` and
+  `IMPORTED_LOCATION_<CONFIG>` for each imported target and declares its
+  artifact paths as `ExternalProject` build byproducts.
+- The isolated CMake project must **actually produce and install** the mapped
+  paths for each configuration. This feature does not invent compiler flags or
+  guarantee ABI compatibility; e.g. a configuration named `ASan` does not
+  automatically enable sanitizers.
+- Configuration names are limited to letters, numbers, underscores, dots,
+  plus and minus; names differing only in letter case are rejected.
