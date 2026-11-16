@@ -58,7 +58,7 @@ underlying `ExternalProject` supports `<SOURCE_DIR>`, `<BINARY_DIR>`, and
 ## Important limitations
 
 - Isolated builds run at **build time**, not at consumer configure time.
-- Up to **one imported target** can be declared using `PROVIDES` and `ARTIFACT`.
+- The legacy `ARTIFACT` accepts one imported target; `ARTIFACTS` supports multiple explicitly mapped targets.
 - CppDeps does **not** infer artifacts, target names, C++ ABI compatibility,
   or transitive static-link dependencies.
 - A custom, non-CMake source requires a `BUILD_COMMAND`; absent configure or
@@ -67,3 +67,58 @@ underlying `ExternalProject` supports `<SOURCE_DIR>`, `<BINARY_DIR>`, and
   discovery need additional integration testing before production use.
 - The top-level CMake tests remain independent from isolated dependency tests.
 - Dependency Git resolution, checkout and lockfile behavior are unchanged.
+
+## Imported-target contract validation
+
+The legacy `ARTIFACT` declaration publishes one imported library with
+`PROVIDES <target>` and `ARTIFACT <file>`. For multiple targets use
+`ARTIFACTS <target>=<file> ...`. `PROVIDES` requires one of these artifact
+forms; neither artifact form nor `INCLUDE_DIRS` is valid without `PROVIDES`.
+Reusing a target name or specifying an artifact that resolves to a directory
+is an error.
+
+Both artifact forms and `INCLUDE_DIRS` accept paths relative to the isolated
+installation prefix, absolute paths, or the explicit `<SOURCE_DIR>`,
+`<BINARY_DIR>` and `<INSTALL_DIR>` placeholders. Resolved paths are normalized;
+duplicate include directories are removed. CppDeps creates declared include
+directories during configuration because CMake validates imported targets
+before the isolated build has installed headers.
+
+Declared artifacts must actually be produced by the isolated build/install
+commands. CppDeps does not create library files, infer transitive dependencies,
+or independently validate ABI compatibility. Per-configuration artifact
+locations remain future work.
+
+## Multiple imported libraries from one isolated build
+
+An isolated dependency may now publish multiple imported libraries using explicit
+`target=artifact` mappings. The existing single-target `ARTIFACT` syntax remains
+supported without changes.
+
+```cmake
+cppdeps_add(
+  NAME example
+  GIT_REPOSITORY https://example.invalid/example.git
+  TAG v1.0
+  ISOLATED
+  PROVIDES example::core example::utils
+  ARTIFACTS
+    example::core=lib/libcore.a
+    example::utils=lib/libutils.a
+  INCLUDE_DIRS include
+)
+cppdeps_install_all()
+```
+
+`ARTIFACTS` must define exactly one entry for each `PROVIDES` target. The mapping
+order does not matter. Duplicate, unknown or missing target mappings, duplicate
+artifact paths, and mixing `ARTIFACT` with `ARTIFACTS` are configuration errors.
+Every artifact path follows the same absolute/install-relative and placeholder
+rules as the legacy `ARTIFACT` argument. All mapped artifacts are declared as
+`ExternalProject` build byproducts, and each imported target depends on the
+same isolated build. `INCLUDE_DIRS` is shared across all provided targets.
+
+Each imported library is currently of type `UNKNOWN IMPORTED`; CppDeps does
+not infer inter-library link dependencies. Consumers must explicitly link all
+required libraries in an appropriate order. Artifact filenames are toolchain-
+specific, and multi-config locations remain unsupported.
