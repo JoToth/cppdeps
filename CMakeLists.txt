@@ -54,5 +54,9 @@ if(PROJECT_IS_TOP_LEVEL
       "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
       -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_custom_command.cmake"
   )
+  add_test(NAME cppdeps_isolated_artifact_contract
+    COMMAND "${CMAKE_COMMAND}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_artifact_contract.cmake"
+  )
   set_tests_properties(cppdeps_conflict_fail PROPERTIES WILL_FAIL TRUE)
 endif()

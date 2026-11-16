@@ -67,3 +67,24 @@ underlying `ExternalProject` supports `<SOURCE_DIR>`, `<BINARY_DIR>`, and
   discovery need additional integration testing before production use.
 - The top-level CMake tests remain independent from isolated dependency tests.
 - Dependency Git resolution, checkout and lockfile behavior are unchanged.
+
+## Imported-target contract validation
+
+A single isolated dependency can currently publish **one** imported library
+with `PROVIDES <target>` and `ARTIFACT <file>`. When `PROVIDES` is specified,
+`ARTIFACT` is required. Conversely, `ARTIFACT` and `INCLUDE_DIRS` have no
+meaning without `PROVIDES` and are rejected. Reusing an existing target name,
+providing multiple target names, or specifying an artifact that resolves to a
+directory is also an error.
+
+Both `ARTIFACT` and `INCLUDE_DIRS` accept paths relative to the isolated
+installation prefix, absolute paths, or the explicit `<SOURCE_DIR>`,
+`<BINARY_DIR>` and `<INSTALL_DIR>` placeholders. Resolved paths are normalized;
+duplicate include directories are removed. CppDeps creates declared include
+directories during configuration because CMake validates imported targets
+before the isolated build has installed headers.
+
+The declared artifact must actually be produced by the isolated build/install
+commands. CppDeps does not create library files, infer transitive dependencies,
+or independently validate ABI compatibility. Multiple provided libraries and
+per-configuration artifact locations remain future work.
