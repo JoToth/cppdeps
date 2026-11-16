@@ -5,7 +5,6 @@ if(PROJECT_IS_TOP_LEVEL
    AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   include(CTest)
 endif()
-
 if(PROJECT_IS_TOP_LEVEL
    AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR
    AND BUILD_TESTING)
@@ -43,6 +42,37 @@ if(PROJECT_IS_TOP_LEVEL
   )
   add_test(NAME cppdeps_dirty_checkout
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/tests/dirty_checkout.cmake
+  )
+  add_test(NAME cppdeps_isolated_integration
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_integration.cmake"
+  )
+  add_test(NAME cppdeps_isolated_custom_command
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_custom_command.cmake"
+  )
+  add_test(NAME cppdeps_isolated_artifact_contract
+    COMMAND "${CMAKE_COMMAND}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_artifact_contract.cmake"
+  )
+  add_test(NAME cppdeps_isolated_multi_artifact
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_multi_artifact.cmake"
+  )
+  add_test(NAME cppdeps_isolated_multi_artifact_contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCPPDEPS_TEST_GENERATOR=${CMAKE_GENERATOR}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/tests/isolated_multi_artifact_contract.cmake"
+  )
+  # These two legacy script tests launch nested cmake without -G.
+  # Carry the configured parent generator through their process environment.
+  set_tests_properties(
+    cppdeps_bootstrap_fetch_integration
+    cppdeps_isolated_artifact_contract
+    PROPERTIES ENVIRONMENT "CMAKE_GENERATOR=${CMAKE_GENERATOR}"
   )
   set_tests_properties(cppdeps_conflict_fail PROPERTIES WILL_FAIL TRUE)
 endif()

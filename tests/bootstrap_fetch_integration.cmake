@@ -25,20 +25,12 @@ file(WRITE "${_consumer}/CMakeLists.txt" "cmake_minimum_required(VERSION 3.20)\n
 
 function(_configure)
   execute_process(
-    COMMAND "${CMAKE_COMMAND}"
-      -G "${CPPDEPS_TEST_GENERATOR}"
-      -S "${_consumer}"
-      -B "${_build}"
-      "-DCPPDEPS_BOOTSTRAP_GIT_REPOSITORY:STRING=${_repo}"
-      ${ARGN}
-    RESULT_VARIABLE rc
-    OUTPUT_VARIABLE out
-    ERROR_VARIABLE err
+    COMMAND "${CMAKE_COMMAND}" -S "${_consumer}" -B "${_build}"
+      "-DCPPDEPS_BOOTSTRAP_GIT_REPOSITORY:STRING=${_repo}" ${ARGN}
+    RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err
   )
-
   if(NOT rc EQUAL 0)
-    message(FATAL_ERROR
-      "FetchContent consumer configure failed:\n${out}\n${err}")
+    message(FATAL_ERROR "FetchContent consumer configure failed:\n${out}\n${err}")
   endif()
 endfunction()
 

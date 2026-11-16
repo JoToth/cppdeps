@@ -13,7 +13,6 @@ jobs:
         run: cmake -S . -B build -G Ninja -DBUILD_TESTING=ON
       - name: Test
         run: ctest --test-dir build --output-on-failure
-
   msys2-ucrt64:
     runs-on: windows-latest
     defaults:
@@ -25,8 +24,24 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          install: git cmake ninja
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-gcc
+      - name: Verify UCRT64 toolchain
+        run: |
+          command -v cmake
+          command -v ninja
+          command -v gcc
+          command -v g++
+          g++ --version
       - name: Configure
         run: cmake -S . -B build -G Ninja -DBUILD_TESTING=ON
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          export CC="$(cygpath -m "$(command -v gcc)")"
+          export CXX="$(cygpath -m "$(command -v g++)")"
+          echo "Using C++ compiler: $CXX"
+          "$CXX" --version
+          ctest --test-dir build --output-on-failure

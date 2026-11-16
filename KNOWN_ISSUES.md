@@ -102,4 +102,7 @@ graph. Before use, verify:
 - A fresh consumer project configures successfully with the intended CppDeps
   version in your target environment.
 
+Windows/MSYS2 has not been verified for this release candidate and is not a
+release prerequisite for the Linux-focused workflow.
+
 **Status:** recommended consumer verification; no confirmed defect implied.

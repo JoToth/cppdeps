@@ -342,3 +342,7 @@ BSD 3-Clause License
 ## Known issues
 
 See [KNOWN_ISSUES.md](KNOWN_ISSUES.md), especially the section on recursive / nested CppDeps use and multi-version limitations.
+
+## Experimental isolated builds
+
+See [docs/ISOLATED_BUILDS.md](docs/ISOLATED_BUILDS.md) for isolated CMake builds, custom commands and current limitations.
