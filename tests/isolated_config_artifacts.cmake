@@ -1,0 +1,63 @@
+# End-to-end arbitrary configuration names with Ninja Multi-Config.
+cmake_minimum_required(VERSION 3.20)
+set(root "${CMAKE_CURRENT_LIST_DIR}/..")
+set(work "${CMAKE_CURRENT_BINARY_DIR}/tmp/isolated_config_artifacts")
+file(REMOVE_RECURSE "${work}")
+file(MAKE_DIRECTORY "${work}/lib" "${work}/consumer")
+file(WRITE "${work}/lib/CMakeLists.txt" [=[
+cmake_minimum_required(VERSION 3.20)
+project(config_artifacts LANGUAGES CXX)
+add_library(alpha STATIC alpha.cpp)
+add_library(beta STATIC beta.cpp)
+install(TARGETS alpha beta ARCHIVE DESTINATION "lib/$<CONFIG>")
+]=])
+file(WRITE "${work}/lib/alpha.cpp" "int alpha(){return 19;}\n")
+file(WRITE "${work}/lib/beta.cpp" "int beta(){return 23;}\n")
+file(WRITE "${work}/consumer/main.cpp" "int alpha(); int beta(); int main(){return alpha()+beta()==42?0:1;}\n")
+file(TO_CMAKE_PATH "${root}/cmake/CppDeps.cmake" module)
+file(TO_CMAKE_PATH "${work}/lib" local_src)
+set(config [=[
+cmake_minimum_required(VERSION 3.20)
+project(custom_config_consumer LANGUAGES CXX)
+set(DEP_EXAMPLE_SOURCE_DIR "@local_src@")
+include("@module@")
+cppdeps_add(NAME example GIT_REPOSITORY https://invalid.invalid/example.git TAG v1 ISOLATED
+  PROVIDES alpha::alpha beta::beta
+  CONFIG_ARTIFACTS
+    "ASan:alpha::alpha=lib/<CONFIG>/libalpha.a"
+    "ASan:beta::beta=lib/<CONFIG>/libbeta.a"
+    "Coverage:alpha::alpha=lib/<CONFIG>/libalpha.a"
+    "Coverage:beta::beta=lib/<CONFIG>/libbeta.a")
+cppdeps_install_all()
+add_executable(consumer main.cpp)
+target_link_libraries(consumer PRIVATE alpha::alpha beta::beta)
+]=])
+string(CONFIGURE "${config}" config @ONLY)
+file(WRITE "${work}/consumer/CMakeLists.txt" "${config}")
+set(args -G "Ninja Multi-Config" "-DCMAKE_CONFIGURATION_TYPES:STRING=ASan\;Coverage")
+if(DEFINED ENV{CXX} AND NOT "$ENV{CXX}" STREQUAL "")
+  list(APPEND args "-DCMAKE_CXX_COMPILER:FILEPATH=$ENV{CXX}")
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" ${args} -S "${work}/consumer" -B "${work}/build"
+  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(NOT rc EQUAL 0)
+  message(FATAL_ERROR "arbitrary config configure failed:\n${out}\n${err}")
+endif()
+foreach(config IN ITEMS ASan Coverage)
+  execute_process(COMMAND "${CMAKE_COMMAND}" --build "${work}/build" --config "${config}" --parallel 2
+    RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "arbitrary config ${config} build failed:\n${out}\n${err}")
+  endif()
+  execute_process(COMMAND "${work}/build/${config}/consumer" RESULT_VARIABLE rc)
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "arbitrary config ${config} consumer failed (${rc})")
+  endif()
+  foreach(lib alpha beta)
+    if(NOT EXISTS "${work}/build/_cppdeps/isolated/install/example/lib/${config}/lib${lib}.a")
+      message(FATAL_ERROR "missing ${config} artifact: lib${lib}.a")
+    endif()
+  endforeach()
+endforeach()
+file(REMOVE_RECURSE "${work}")
+message(STATUS "arbitrary config imported artifacts passed")
